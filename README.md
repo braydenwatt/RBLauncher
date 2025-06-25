@@ -87,7 +87,7 @@ A custom Minecraft launcher built with PyQt5 that supports Fabric modloader, van
 - **Export/Copy**: Share instances or create backups
 - **Delete**: Remove unwanted instances
 
-## 🛠Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
