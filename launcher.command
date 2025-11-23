@@ -1,12 +1,18 @@
 #!/bin/bash
 
-pip3 install requests
+# Get the directory of the currently running .command file
+cd "$(dirname "$0")" || exit 1
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Now everything uses the correct working directory
+pip3 install -r requirements.txt
 
-xattr -rc "$SCRIPT_DIR/create_minecraft_directory.sh"
-xattr -rc "$SCRIPT_DIR/download_vanilla.sh"
-xattr -rc "$SCRIPT_DIR/fabric.command"
-xattr -rc "$SCRIPT_DIR/install_fabric.sh"
+# Fix xattr for scripts inside ./scripts
+xattr -rc scripts/create_minecraft_directory.sh
+xattr -rc scripts/download_vanilla.sh
+xattr -rc scripts/fabric.command
+xattr -rc scripts/install_fabric.sh
 
-python3 "$SCRIPT_DIR/minecraft_launcher.py"
+# Run the scripts using the new folder path
+./scripts/create_minecraft_directory.sh
+
+python3 python/launcher.py
