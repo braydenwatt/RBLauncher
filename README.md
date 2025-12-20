@@ -1,4 +1,4 @@
-# Fabric Minecraft Launcher
+# RBLauncher
 
 A lightweight Python-based Minecraft launcher.
 
