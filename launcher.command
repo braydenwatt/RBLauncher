@@ -15,4 +15,4 @@ xattr -rc scripts/install_fabric.sh
 # Run the scripts using the new folder path
 ./scripts/create_minecraft_directory.sh
 
-python3 python/launcher.py
+python3 python/new_launcher.py
