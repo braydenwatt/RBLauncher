@@ -3894,6 +3894,57 @@ class SettingsWindow(QDialog):
     def apply_styles(self):
         self.setStyleSheet("QDialog#SettingsWindow { background: #18181b; }")
 
+class AppUpdateChecker(QObject):
+    """
+    Checks a URL for a JSON file containing {"version": "2.0.1", "url": "..."}
+    """
+    finished = pyqtSignal(bool, str, str)  # has_update, new_version, download_url
+
+    def __init__(self, current_version, update_url):
+        super().__init__()
+        self.current_version = current_version
+        self.update_url = update_url
+
+    def run(self):
+        try:
+            print(f"[UPDATE] Checking for updates from {self.update_url}...")
+            # 1. Fetch the JSON
+            r = requests.get(self.update_url, timeout=5)
+            if r.status_code != 200:
+                print(f"[UPDATE] Failed with status {r.status_code}")
+                self.finished.emit(False, "", "")
+                return
+
+            data = r.json()
+            remote_ver = data.get("version", "0.0.0")
+            download_url = data.get("url", "")
+
+            # 2. Compare Versions (Simple Semantic Versioning)
+            if self._is_newer(remote_ver):
+                self.finished.emit(True, remote_ver, download_url)
+            else:
+                self.finished.emit(False, remote_ver, "")
+
+        except Exception as e:
+            print(f"[UPDATE] Error checking for updates: {e}")
+            self.finished.emit(False, "", "")
+
+    def _is_newer(self, remote_ver):
+        """Returns True if remote_ver > self.current_version"""
+        try:
+            # Remove 'v' prefix and suffixes like '-beta' for comparison
+            # This turns "v2.0.1-beta" into [2, 0, 1]
+            def parse(v):
+                clean = v.lower().lstrip("v").split("-")[0] 
+                return [int(x) for x in clean.split(".")]
+
+            local_parts = parse(self.current_version)
+            remote_parts = parse(remote_ver)
+            
+            return remote_parts > local_parts
+        except Exception:
+            return False
+
 # ---------- Main Window ----------
 class LauncherV2(QMainWindow):
     mc_feed_loaded = pyqtSignal(list)
@@ -3903,7 +3954,11 @@ class LauncherV2(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RBLauncher: Dusk")
+        # --------- VERSION CONFIG ----------
+        self.APP_VERSION = "2.0.1"
+        self.UPDATE_API_URL = "https://raw.githubusercontent.com/braydenwatt/RBLauncher/main/version_manifest.json"
+
+        self.setWindowTitle(f"RBLauncher: Dusk (v{self.APP_VERSION})")
         self.resize(1200, 760)
         self.log_output.connect(self._handle_log_output)
         self.icon_paths = {
@@ -3937,7 +3992,6 @@ class LauncherV2(QMainWindow):
 
         # load config
         self.load_config()
-        self.enforce_login_expiry()
         self.update_launch_auth_state()
 
         # UI
@@ -3954,6 +4008,7 @@ class LauncherV2(QMainWindow):
 
         self.apply_styles()
 
+        self.enforce_login_expiry()
         self._last_played_timer = QTimer(self)
         self._last_played_timer.timeout.connect(self._refresh_last_played_card)
         self._last_played_timer.start(30_000)  # every 30s
@@ -3970,6 +4025,53 @@ class LauncherV2(QMainWindow):
         self.pages.setCurrentWidget(self.page_home)   # stay on home
         self.mc_feed_loaded.connect(self._set_mc_updates_items)
         self.mc_feed_done.connect(self._mc_feed_done_ui)
+
+        QTimer.singleShot(2000, self.check_for_app_updates)
+
+    # ---------------- APP UPDATE LOGIC ----------------
+
+    def check_for_app_updates(self):
+        """Starts the update check thread."""
+        self._app_update_thread = QThread()
+        self._app_update_worker = AppUpdateChecker(self.APP_VERSION, self.UPDATE_API_URL)
+        self._app_update_worker.moveToThread(self._app_update_thread)
+
+        # Connect signals
+        self._app_update_thread.started.connect(self._app_update_worker.run)
+        self._app_update_worker.finished.connect(self._on_app_update_result)
+        
+        # Cleanup
+        self._app_update_worker.finished.connect(self._app_update_thread.quit)
+        self._app_update_thread.finished.connect(self._app_update_worker.deleteLater)
+        self._app_update_thread.finished.connect(self._app_update_thread.deleteLater)
+
+        self._app_update_thread.start()
+
+    def _on_app_update_result(self, has_update, new_version, url):
+        if has_update:
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Update Available")
+            msg.setText(f"A new version of RBLauncher is available!\n\nCurrent: {self.APP_VERSION}\nNew: {new_version}")
+            msg.setInformativeText("Would you like to download it now?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            
+            # Style the message box to match your theme
+            msg.setStyleSheet("""
+                QMessageBox { background-color: #18181b; color: white; }
+                QLabel { color: white; }
+                QPushButton { 
+                    background-color: #059669; 
+                    color: white; 
+                    border-radius: 6px; 
+                    padding: 6px 12px;
+                }
+                QPushButton:hover { background-color: #10b981; }
+            """)
+
+            if msg.exec_() == QMessageBox.Yes:
+                import webbrowser
+                webbrowser.open(url)
 
     def is_authenticated(self) -> bool:
         return bool(self.access_token)
@@ -4053,7 +4155,7 @@ class LauncherV2(QMainWindow):
 
     def _default_profile_avatar(self):
         # fallback: keep your gradient box but put a letter
-        self.profile_avatar.setText((self.username[:1] if self.username else "S").upper())
+        self.profile_avatar.setText((self.username[:1] if self.username else "U").upper())
         self.profile_avatar.setAlignment(Qt.AlignCenter)
 
     # ---------------- AVATAR LOGIC ----------------
@@ -4062,7 +4164,7 @@ class LauncherV2(QMainWindow):
         """Starts the background worker to fetch the avatar."""
         # 1. Set a temporary fallback (Letter or default image)
         self.profile_avatar.clear() # Clear previous image/text
-        self.profile_avatar.setText((self.username[:1] if self.username else "S").upper())
+        self.profile_avatar.setText((self.username[:1] if self.username else "U").upper())
         
         # 2. Start thread
         threading.Thread(target=self._worker_fetch_avatar, daemon=True).start()
@@ -4259,7 +4361,7 @@ class LauncherV2(QMainWindow):
 
     def _set_auth_ui_state(self):
         """Refresh sidebar/profile UI based on whether access_token exists."""
-        self.profile_name.setText(self.username or "Steve")
+        self.profile_name.setText(self.username or "Username")
         self.profile_status.setText("Authenticated" if self.access_token else "Not logged in")
 
         # refresh profile menu contents next open
@@ -4340,7 +4442,7 @@ class LauncherV2(QMainWindow):
         h.setContentsMargins(12, 12, 12, 12)  # keep nice header padding
         h.setSpacing(4)
 
-        name = QLabel(self.username or "Steve")
+        name = QLabel(self.username or "Username")
         name.setObjectName("ProfileMenuName")
         email = QLabel("Microsoft account" if self.access_token else "Not logged in")
         email.setObjectName("ProfileMenuEmail")
@@ -4531,7 +4633,7 @@ class LauncherV2(QMainWindow):
         self.profile_avatar.setText(" ")  # placeholder, you can set pixmap later
 
         # Name + status
-        self.profile_name = QLabel(self.username or "Steve")
+        self.profile_name = QLabel(self.username or "Username")
         self.profile_name.setObjectName("ProfileName")
         self.profile_status = QLabel("Authenticated" if self.access_token else "Not logged in")
         self.profile_status.setObjectName("ProfileStatus")
