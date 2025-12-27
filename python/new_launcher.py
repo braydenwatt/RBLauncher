@@ -1895,6 +1895,8 @@ class ModrinthInstaller(QObject):
     def run(self):
         try:
             url = self.file_info.get("url")
+            version_id = url.split("/versions/")[1].split("/", 1)[0]
+
             filename = self.file_info.get("filename")
             
             if not url or not filename:
@@ -2987,8 +2989,6 @@ class ManageModsPage(QWidget):
         tabs_lay.addWidget(self.btn_tab_browse)
         tabs_lay.addStretch()
         content_lay.addWidget(tabs_frame)
-
-        # ... inside init_ui ...
         
         # Tool Bar (Search + Sort)
         tool_frame = QFrame()
@@ -3952,6 +3952,9 @@ class LauncherV2(QMainWindow):
     avatar_ready = pyqtSignal(QPixmap)
     log_output = pyqtSignal(str) # ✅ NEW: Signal for logs
 
+    instance_started = pyqtSignal(str)
+    instance_stopped = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         # --------- VERSION CONFIG ----------
@@ -4025,6 +4028,8 @@ class LauncherV2(QMainWindow):
         self.pages.setCurrentWidget(self.page_home)   # stay on home
         self.mc_feed_loaded.connect(self._set_mc_updates_items)
         self.mc_feed_done.connect(self._mc_feed_done_ui)
+        self.instance_started.connect(self._on_instance_state_changed)
+        self.instance_stopped.connect(self._on_instance_state_changed)
 
         QTimer.singleShot(2000, self.check_for_app_updates)
 
@@ -4522,6 +4527,8 @@ class LauncherV2(QMainWindow):
         self.refresh_instances_list()
         self.instances_list.clearSelection()
         self.pages.setCurrentWidget(self.page_home)
+
+        self.update_launch_buttons_ui()
 
     # ---------------- UI: Sidebar ----------------
     def build_sidebar(self):
@@ -5113,26 +5120,36 @@ class LauncherV2(QMainWindow):
 
     def launch_last_played_from_home(self):
         if not self.is_authenticated():
-            QMessageBox.warning(
-                self,
-                "Not signed in",
-                "You must sign in with a Microsoft account before launching Minecraft."
-            )
-            return
-        if not self.instances_data:
-            QMessageBox.information(self, "No Instances", "Create an instance first.")
+            QMessageBox.warning(self, "Not signed in", "Sign in required.")
             return
 
-        # ✅ use stored last played if valid, else fallback
+        # Identify target instance
         name = getattr(self, "last_played_instance", "")
         if not name or name not in self.instances_data:
-            # fallback: pick the most recently played by timestamp if available
             name = self._pick_most_recent_instance() or next(iter(self.instances_data.keys()))
+        
+        if not name: return
 
-        self.set_selected_instance(name)
-        self.pages.setCurrentWidget(self.page_launcher)
-        self.refresh_instances_list()
-        self.launch_instance()
+        # Check if running
+        if name in self.active_instances:
+            self.kill_instance(name)
+        else:
+            # Set selection and launch
+            self.set_selected_instance(name)
+            self.pages.setCurrentWidget(self.page_launcher)
+            self.refresh_instances_list()
+            self.launch_instance()
+
+    def kill_instance(self, name):
+        """Terminates the subprocess for the given instance."""
+        proc = self.active_instances.get(name)
+        if proc:
+            self.log_output.emit(f"\n[Manager] Stopping instance: {name}...")
+            try:
+                pid = proc.pid
+                os.kill(pid, signal.SIGKILL)
+            except Exception as e:
+                print(f"Error killing process: {e}")
 
     def build_launcher_page(self, parent):
         outer = QVBoxLayout(parent)
@@ -5570,6 +5587,8 @@ class LauncherV2(QMainWindow):
         # Launch button label
         self.btn_launch_big.setText(f"Launch {name}")
 
+        self.update_launch_buttons_ui()
+
     # ---------------- Styles ----------------
     def apply_styles(self):
         # Dark zinc + emerald accent, close to your mockup
@@ -5936,7 +5955,7 @@ class LauncherV2(QMainWindow):
     # ---------------- LAUNCHING LOGIC ----------------
 
     def launch_instance(self):
-        """Launch the selected instance in a background thread"""
+        """Toggle: Launch if idle, Kill if running."""
         # 1. Auth Check
         if not self.is_authenticated():
             QMessageBox.warning(self, "Auth Required", "Please sign in first.")
@@ -5944,15 +5963,15 @@ class LauncherV2(QMainWindow):
 
         # 2. Selection Check
         if not self.selected_instance_name:
-            print("[Launch] No instance selected")
-            return
-        
-        # 3. Already Running Check
-        if self.selected_instance_name in self.active_instances:
-            QMessageBox.information(self, "Running", "This instance is already running.")
             return
 
-        # 4. Record Stats
+        # 3. TOGGLE LOGIC
+        if self.selected_instance_name in self.active_instances:
+            # IT IS RUNNING -> KILL IT
+            self.kill_instance(self.selected_instance_name)
+            return
+
+        # 4. Record Stats (Only on launch)
         self.mark_instance_last_played(self.selected_instance_name)
 
         print(f"[Launch] Starting: {self.selected_instance_name}")
@@ -5961,7 +5980,6 @@ class LauncherV2(QMainWindow):
         modloader = instance_data.get('modloader', 'Vanilla')
         version = instance_data.get('version', '')
 
-        # 5. Branch Logic
         if modloader == "Fabric":
             self.launch_fabric_instance(version, instance_data)
         else:
@@ -6032,6 +6050,7 @@ class LauncherV2(QMainWindow):
 
         def runner():
             instance_name = self.selected_instance_name
+            active_name = instance_name
             try:
                 process = subprocess.Popen(
                     args,
@@ -6044,6 +6063,9 @@ class LauncherV2(QMainWindow):
                 
                 # Register active process
                 self.active_instances[instance_name] = process
+                
+                # Emit signal that instance has started
+                self.instance_started.emit(active_name)
                 
                 # Stream output
                 for line in process.stdout:
@@ -6060,8 +6082,70 @@ class LauncherV2(QMainWindow):
                 if instance_name in self.active_instances:
                     del self.active_instances[instance_name]
 
+                # Emit signal that instance stopped
+                self.instance_stopped.emit(active_name)
         # Start the background thread
         threading.Thread(target=runner, daemon=True).start()
+
+    def _on_instance_state_changed(self, instance_name):
+        """Slot called when any instance starts or stops."""
+        # Refresh buttons based on current selection
+        self.update_launch_buttons_ui()
+
+    def update_launch_buttons_ui(self):
+        """Updates the Big Launch button and Home button based on running PIDs."""
+        
+        # --- 1. Update Instance Page Button (Big Button) ---
+        if self.selected_instance_name:
+            is_running = self.selected_instance_name in self.active_instances
+            self._apply_button_state(self.btn_launch_big, is_running, self.selected_instance_name)
+        
+        # --- 2. Update Home Page Button ---
+        # Determine which instance the home button represents
+        home_inst_name = getattr(self, "last_played_instance", "")
+        if not home_inst_name or home_inst_name not in self.instances_data:
+            home_inst_name = self._pick_most_recent_instance()
+        
+        if home_inst_name:
+            is_running = home_inst_name in self.active_instances
+            self._apply_button_state(self.btn_launch_home, is_running, home_inst_name, is_home=True)
+
+    def _apply_button_state(self, btn, is_running, instance_name, is_home=False):
+        """Helper to style a button as Launch (Green) or Stop (Red)."""
+        if is_running:
+            btn.setText(f"Stop {instance_name}")
+            btn.setObjectName("StopButton") # Requires CSS update below
+            # Force red style directly to ensure override
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #ef4444; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 14px; 
+                    font-size: 17px; 
+                    font-weight: 700;
+                }
+                QPushButton:hover { background-color: #dc2626; }
+            """)
+            self.set_button_svg_icon(btn, "Kill", size=22)
+        else:
+            prefix = "Launch last played" if is_home else "Launch"
+            display_name = f" ({instance_name})" if is_home else f" {instance_name}"
+            btn.setText(f"{prefix}{display_name}")
+            btn.setObjectName("LaunchButton")
+            # Force green style (restore)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 14px; 
+                    font-size: 17px; 
+                    font-weight: 700;
+                }
+                QPushButton:hover { background-color: #059669; }
+            """)
+            self.set_button_svg_icon(btn, "Launch", size=22)
 
     def open_instance_folder(self):
         if not self.selected_instance_name:
