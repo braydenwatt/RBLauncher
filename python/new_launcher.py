@@ -1047,12 +1047,15 @@ class NewInstancePage(QWidget):
         final_data = {}
         
         if self.instance_type == "custom":
+            is_fabric = self.data["loader"] == "fabric"
+
             final_data = {
                 "type": "Custom",
                 "name": self.data["name"],
                 "version": self.data["version"],
                 "modloader": "Fabric" if self.data["loader"] == "fabric" else "Vanilla",
-                "loader_version": None, 
+                "loader_version": "latest" if is_fabric else None,
+                "fabric_version": "latest" if is_fabric else None,
                 "image": image_data,
                 "last_played": None
             }
@@ -3958,7 +3961,7 @@ class LauncherV2(QMainWindow):
     def __init__(self):
         super().__init__()
         # --------- VERSION CONFIG ----------
-        self.APP_VERSION = "2.0.2"
+        self.APP_VERSION = "2.0.3"
         self.UPDATE_API_URL = "https://raw.githubusercontent.com/braydenwatt/RBLauncher/main/version_manifest.json"
 
         self.setWindowTitle(f"RBLauncher: Dusk (v{self.APP_VERSION})")
@@ -5142,14 +5145,56 @@ class LauncherV2(QMainWindow):
 
     def kill_instance(self, name):
         """Terminates the subprocess for the given instance."""
-        proc = self.active_instances.get(name)
-        if proc:
-            self.log_output.emit(f"\n[Manager] Stopping instance: {name}...")
+        # 1. Check if the instance is actually running/tracked
+        if name not in self.active_instances:
+            print(f"Instance {name} is not in active instances.")
+            return
+
+        self.log_output.emit(f"[Manager] Stopping instance: {name}...")
+
+        try:
+            # 2. Setup the script path
+            script_name = "kill.command"
+            launch_script = os.path.join(BASE_DIR, "scripts", script_name)
+
+            # 3. Prepare arguments
+            # Your bash script builds the path using the name, so we just pass 'name'.
+            # If you passed a full path here, the bash script would double it up.
+            args = [launch_script, name] 
+            
+            kill_thread = threading.Thread(target=self._run_kill_thread, args=(args,))
+            kill_thread.start()
+
+        except Exception as e:
+            print(f"Error preparing to kill process: {e}")
+
+    def _run_kill_thread(self, args):
+        if args[0].endswith(".command") or args[0].endswith(".sh"):
+            subprocess.run(["chmod", "+x", args[0]])
+        def runner():
             try:
-                pid = proc.pid
-                os.kill(pid, signal.SIGKILL)
+                process = subprocess.Popen(
+                    args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True
+                )
+                
+                # Stream output
+                for line in process.stdout:
+                    # Emit signal instead of printing
+                    self.log_output.emit(line.strip())
+                    
+                process.wait()
+                
             except Exception as e:
-                print(f"Error killing process: {e}")
+                self.log_output.emit(f"Error killing instance: {str(e)}")
+
+        # Start the background thread
+        threading.Thread(target=runner, daemon=True).start()
+        
 
     def build_launcher_page(self, parent):
         outer = QVBoxLayout(parent)
@@ -5985,12 +6030,51 @@ class LauncherV2(QMainWindow):
         else:
             self.launch_vanilla_instance(version)
 
+    def get_latest_fabric_loader(self, game_version):
+        """Fetches the latest stable Fabric Loader version for a specific Minecraft version."""
+        url = f"https://meta.fabricmc.net/v2/versions/loader/{game_version}"
+        
+        try:
+            response = requests.get(url, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            
+            if data:
+                # The API returns a list sorted by newest first.
+                # We grab the first one. 
+                # You could also loop through to find the first where 'loader'['stable'] is True.
+                return data[0]['loader']['version']
+                
+        except Exception as e:
+            print(f"Failed to fetch Fabric version: {e}")
+            # Fallback to a safe default or handle error appropriately
+            return None 
+        
+        return None
+        
     def launch_fabric_instance(self, version, instance_data):
         """Prepare arguments for Fabric launch"""
         script_name = "fabric.command"
         launch_script = os.path.join(BASE_DIR, "scripts", script_name)
         
-        fabric_version = instance_data.get('fabric_version', None)
+        # --- NEW LOGIC START ---
+        # Check if we need to resolve "latest"
+        fabric_version = instance_data.get('fabric_version', "latest")
+        
+        if fabric_version == "latest":
+            print(f"Resolving latest Fabric Loader for Minecraft {version}...")
+            fetched_version = self.get_latest_fabric_loader(version)
+            
+            if fetched_version:
+                fabric_version = fetched_version
+                print(f"Resolved Fabric Loader: {fabric_version}")
+            else:
+                # Handle offline/error case - maybe default to a known safe version 
+                # or raise an error if you can't launch without it.
+                print("Could not resolve Fabric version, check internet connection.")
+                self.log_output.emit("Could not resolve Fabric version, check internet connection.")
+                return 
+        # --- NEW LOGIC END ---
 
         # ✅ Ensure we use self.java_path
         java_exec = self.java_path if self.java_path else "java"
