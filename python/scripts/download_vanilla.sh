@@ -1,171 +1,186 @@
 #!/bin/bash
 
-# Vanilla Minecraft downloader with better debugging and Java path support
-# Usage: ./download_vanilla.sh [minecraft_version] [java_path]
-# If no minecraft_version provided, defaults to latest release
+# Vanilla Minecraft downloader with full asset, library, and native support
+# Usage: ./download_vanilla.sh [minecraft_version] [java_path] [installing_fabric]
 
-set -e  # Exit on any error
+set -e
 
-# Color codes for output
+# Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Output helpers
+# Helpers
 debug()   { echo -e "${BLUE}[DEBUG]${NC} $1"; }
 info()    { echo -e "${GREEN}[INFO]${NC} $1"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 
-# Parse arguments
+# Arguments
 MINECRAFT_VERSION=$1
 JAVA_PATH=$2
 INSTALLING_FABRIC=$3
 
 # Directories
-APP_SUPPORT_DIR="$HOME/Library/Application Support"
-MINECRAFT_DIR="$APP_SUPPORT_DIR/ReallyBadLauncher"
-VERSIONS_BASE_DIR="$MINECRAFT_DIR/versions"
+MODRINTH_DIR="$HOME/Library/Application Support/ReallyBadLauncher"
+VERSIONS_BASE_DIR="$MODRINTH_DIR/versions"
+ASSETS_DIR="$MODRINTH_DIR/assets"
+LIBRARIES_DIR="$MODRINTH_DIR/libraries"
 
-# Java path detection (optional for vanilla download, but good for consistency)
+# Java Detection
 if [ -n "$JAVA_PATH" ]; then
-    if [ ! -x "$JAVA_PATH" ]; then
-        error "Specified Java path is invalid or not executable: $JAVA_PATH"
-        exit 1
-    fi
     JAVA_CMD="$JAVA_PATH"
-    info "Using specified Java: $JAVA_CMD"
 else
-    debug "No Java path specified, searching..."
-    for loc in \
-        "/usr/bin/java" \
-        "/Library/Internet Plug-Ins/JavaAppletPlugin.plugin/Contents/Home/bin/java" \
-        "$(/usr/libexec/java_home 2>/dev/null)/bin/java"; do
-        if [ -x "$loc" ]; then
-            JAVA_CMD="$loc"
-            info "Found Java at: $loc"
-            break
-        fi
-    done
-    if [ -z "$JAVA_CMD" ]; then
-        warn "Java not found. This is OK for vanilla download, but may be needed later."
-    else
-        debug "Testing Java version..."
-        JAVA_VERSION=$("$JAVA_CMD" -version 2>&1 | head -n 1)
-        info "Java version: $JAVA_VERSION"
+    # Quick search
+    if [ -x "/usr/libexec/java_home" ]; then
+        JAVA_CMD="$(/usr/libexec/java_home 2>/dev/null)/bin/java"
+    elif command -v java >/dev/null; then
+        JAVA_CMD="java"
     fi
 fi
 
-# Ensure directories exist
-debug "Creating required directories..."
-mkdir -p "$VERSIONS_BASE_DIR"
-
-# Get version manifest
-MANIFEST_FILE="$MINECRAFT_DIR/version_manifest.json"
-info "Downloading Minecraft version manifest..."
-if ! curl -s -f https://piston-meta.mojang.com/mc/game/version_manifest.json -o "$MANIFEST_FILE"; then
-    error "Failed to download version manifest"
+if [ -z "$JAVA_CMD" ]; then
+    error "Java not found. Please install Java to download natives/libraries."
     exit 1
 fi
 
-# Determine Minecraft version
+info "Using Java: $JAVA_CMD"
+
+# 1. Setup Directories
+mkdir -p "$VERSIONS_BASE_DIR"
+mkdir -p "$ASSETS_DIR"
+mkdir -p "$LIBRARIES_DIR"
+
+# 2. Get Manifest & Version
+MANIFEST_FILE="$MODRINTH_DIR/version_manifest.json"
+info "Downloading version manifest..."
+curl -fsSL "https://piston-meta.mojang.com/mc/game/version_manifest.json" -o "$MANIFEST_FILE"
+
 if [ -z "$MINECRAFT_VERSION" ]; then
-    debug "Finding latest release from manifest..."
-    MINECRAFT_VERSION=$(python3 -c "
-import json; print(json.load(open('$MANIFEST_FILE'))['latest']['release'])
-" 2>/dev/null)
-    if [ -z "$MINECRAFT_VERSION" ]; then
-        error "Failed to determine latest Minecraft release"
-        exit 1
-    fi
-    info "Using latest Minecraft release: $MINECRAFT_VERSION"
-else
-    info "Using specified Minecraft version: $MINECRAFT_VERSION"
+    MINECRAFT_VERSION=$(python3 -c "import json; print(json.load(open('$MANIFEST_FILE'))['latest']['release'])")
+    info "Resolved latest version: $MINECRAFT_VERSION"
 fi
 
-# Find version JSON URL
-debug "Looking up version URL for $MINECRAFT_VERSION..."
+VERSION_DIR="$VERSIONS_BASE_DIR/$MINECRAFT_VERSION"
+mkdir -p "$VERSION_DIR"
+VERSION_JSON="$VERSION_DIR/$MINECRAFT_VERSION.json"
+
+# 3. Download Version JSON
 VERSION_URL=$(python3 -c "
 import json
 for v in json.load(open('$MANIFEST_FILE'))['versions']:
     if v['id'] == '$MINECRAFT_VERSION':
-        print(v['url'])
-        break
-else:
-    exit(1)
-" 2>/dev/null)
+        print(v['url']); break
+")
+curl -fsSL "$VERSION_URL" -o "$VERSION_JSON"
 
-if [ -z "$VERSION_URL" ]; then
-    error "Minecraft version $MINECRAFT_VERSION not found"
-    exit 1
-fi
+# 4. Download Client JAR
+CLIENT_JAR="$VERSION_DIR/$MINECRAFT_VERSION.jar"
+CLIENT_URL=$(python3 -c "import json; print(json.load(open('$VERSION_JSON'))['downloads']['client']['url'])")
+info "Downloading Client JAR..."
+curl -fsSL "$CLIENT_URL" -o "$CLIENT_JAR"
 
-debug "Found version JSON URL: $VERSION_URL"
+# 5. Handle Natives (MinecraftNativesDownloader)
+NATIVES_DIR="$VERSION_DIR/natives"
+mkdir -p "$NATIVES_DIR"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+NATIVES_TOOL="$SCRIPT_DIR/tools/MinecraftNativesDownloader.jar"
+TEMP_TOOL="$VERSION_DIR/file.jar"
 
-# Create version-specific directory
-VERSION_DIR="$VERSIONS_BASE_DIR/$MINECRAFT_VERSION"
-debug "Creating version directory: $VERSION_DIR"
-mkdir -p "$VERSION_DIR"
-
-# Download version JSON
-VERSION_JSON="$VERSION_DIR/${MINECRAFT_VERSION}.json"
-info "Downloading version JSON..."
-if ! curl -s -f "$VERSION_URL" -o "$VERSION_JSON"; then
-    error "Failed to download version JSON"
-    exit 1
-fi
-
-# Extract client jar URL
-debug "Extracting client jar URL from version JSON..."
-CLIENT_JAR_URL=$(python3 -c "
-import json; print(json.load(open('$VERSION_JSON'))['downloads']['client']['url'])
-" 2>/dev/null)
-
-if [ -z "$CLIENT_JAR_URL" ]; then
-    error "Client jar URL not found for version $MINECRAFT_VERSION"
-    exit 1
-fi
-
-debug "Client jar URL: $CLIENT_JAR_URL"
-
-# Download Minecraft client jar
-CLIENT_JAR_PATH="$VERSION_DIR/${MINECRAFT_VERSION}.jar"
-info "Downloading Minecraft client jar..."
-if ! curl -s -f "$CLIENT_JAR_URL" -o "$CLIENT_JAR_PATH"; then
-    error "Failed to download client jar"
-    exit 1
-fi
-
-# Verify download
-if [ ! -f "$CLIENT_JAR_PATH" ]; then
-    error "Client jar was not downloaded successfully"
-    exit 1
-fi
-
-JAR_SIZE=$(ls -lh "$CLIENT_JAR_PATH" | awk '{print $5}')
-info "Client jar downloaded successfully ($JAR_SIZE)"
-
-# Verify installation
-if [ -f "$VERSION_JSON" ] && [ -f "$CLIENT_JAR_PATH" ]; then
-    info "Vanilla Minecraft $MINECRAFT_VERSION installed successfully"
-    info "Version JSON: $VERSION_JSON"
-    info "Client JAR: $CLIENT_JAR_PATH"
+if [ -f "$NATIVES_TOOL" ]; then
+    info "Downloading/Extracting Natives..."
+    cp "$NATIVES_TOOL" "$TEMP_TOOL"
+    cd "$VERSION_DIR"
+    "$JAVA_CMD" -jar "$TEMP_TOOL"
+    
+    # Move natives to correct folder
+    POSSIBLE_SOURCES=("$VERSION_DIR/build/natives/arm64" "$VERSION_DIR/build/natives/macos-arm64" "$VERSION_DIR/natives")
+    FOUND=0
+    for src in "${POSSIBLE_SOURCES[@]}"; do
+        if [ -d "$src" ] && [ "$(ls -A "$src")" ]; then
+            cp -r "$src"/* "$NATIVES_DIR"/
+            FOUND=1
+            break
+        fi
+    done
+    if [ $FOUND -eq 0 ]; then warn "Natives extraction might have failed (no files found)."; fi
+    rm -f "$TEMP_TOOL"
 else
-    error "Installation verification failed"
-    exit 1
+    warn "MinecraftNativesDownloader.jar not found in tools folder. Skipping natives."
 fi
 
-if [ "$INSTALLING_FABRIC" = "true" ]; then
-    info "Installing Fabric Skipping Manifest File"
-else
-    info "Deleting Manifest File"
+# 6. Python Downloader Script (Assets & Libraries)
+cat > /tmp/mc_downloader.py << 'EOF'
+import json, os, sys, urllib.request, hashlib, concurrent.futures, ssl, certifi
+
+def download(url, path, sha1=None):
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path) and sha1:
+            with open(path, 'rb') as f:
+                if hashlib.sha1(f.read()).hexdigest() == sha1: return True
+        
+        ctx = ssl.create_default_context(cafile=certifi.where())
+        with urllib.request.urlopen(url, context=ctx) as r, open(path, 'wb') as f:
+            f.write(r.read())
+        return True
+    except Exception as e:
+        print(f"Fail: {url} -> {e}", file=sys.stderr)
+        return False
+
+def download_libs(json_path, lib_base):
+    with open(json_path) as f: data = json.load(f)
+    tasks = []
+    for lib in data.get('libraries', []):
+        dl = lib.get('downloads', {}).get('artifact')
+        if dl:
+            path = os.path.join(lib_base, dl['path'])
+            tasks.append((dl['url'], path, dl['sha1']))
+    
+    print(f"Downloading {len(tasks)} libraries...")
+    with concurrent.futures.ThreadPoolExecutor(10) as ex:
+        futures = [ex.submit(download, t[0], t[1], t[2]) for t in tasks]
+        for f in concurrent.futures.as_completed(futures): pass
+
+def download_assets(json_path, asset_base):
+    with open(json_path) as f: data = json.load(f)
+    idx_info = data.get('assetIndex', {})
+    if not idx_info: return
+    
+    # Download Index
+    idx_path = os.path.join(asset_base, 'indexes', idx_info['id'] + '.json')
+    download(idx_info['url'], idx_path, idx_info['sha1'])
+    
+    # Download Objects
+    with open(idx_path) as f: objects = json.load(f).get('objects', {})
+    print(f"Downloading {len(objects)} assets...")
+    
+    tasks = []
+    for h in set(o['hash'] for o in objects.values()):
+        url = f"https://resources.download.minecraft.net/{h[:2]}/{h}"
+        path = os.path.join(asset_base, 'objects', h[:2], h)
+        tasks.append((url, path, h))
+        
+    with concurrent.futures.ThreadPoolExecutor(20) as ex:
+        futures = [ex.submit(download, t[0], t[1], t[2]) for t in tasks]
+        for f in concurrent.futures.as_completed(futures): pass
+
+if sys.argv[1] == 'libs': download_libs(sys.argv[2], sys.argv[3])
+if sys.argv[1] == 'assets': download_assets(sys.argv[2], sys.argv[3])
+EOF
+
+info "Downloading Libraries..."
+python3 /tmp/mc_downloader.py libs "$VERSION_JSON" "$MODRINTH_DIR/libraries"
+
+info "Downloading Assets..."
+python3 /tmp/mc_downloader.py assets "$VERSION_JSON" "$ASSETS_DIR"
+
+rm /tmp/mc_downloader.py
+
+if [ "$INSTALLING_FABRIC" != "true" ]; then
     rm -f "$MANIFEST_FILE"
 fi
 
-# Final info
-info "Installation complete"
-info "Minecraft version: $MINECRAFT_VERSION"
-info "Install path: $MINECRAFT_DIR"
-debug "Ready for Fabric installation or direct play"
+info "Vanilla Download Complete."

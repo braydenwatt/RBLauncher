@@ -1,0 +1,63 @@
+2026-01-04 08:20:26.521 Python[88744:1907604] +[IMKClient subclass]: chose IMKClient_Modern
+2026-01-04 08:20:26.521 Python[88744:1907604] +[IMKInputSession subclass]: chose IMKInputSession_Modern
+qt.gui.icc: fromIccProfile: failed minimal tag size sanity
+qt.gui.icc: fromIccProfile: failed minimal tag size sanity
+qt.gui.icc: fromIccProfile: failed minimal tag size sanity
+HOME SVG PATH: /Users/braydenwatt/Downloads/RBLauncher Dusk/.icons/home.svg True
+
+=== MC NEWS DEBUG START ===
+Limit: 6
+Feed URL: https://launchercontent.mojang.com/v2/javaPatchNotes.json
+Cache dir: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes
+[MAIN] Starting thread
+[THREAD] Worker started
+[THREAD] Fetching JSON...
+[NET] SSL: using certifi CA bundle: /Users/braydenwatt/Library/Python/3.13/lib/python/site-packages/certifi/cacert.pem
+[UI] Starting Mojang feed load…
+[THREAD] HTTP status OK, bytes: 217225
+[THREAD] JSON parsed
+[THREAD] Keys: ['version', 'entries']
+[THREAD] Total entries: 359
+[THREAD] Using most recent entries: 6
+[THREAD] Newest date: 2025-12-16T13:32:25.038Z
+[THREAD] Entry 1/6
+  title: Minecraft 26.1 Snapshot 1
+  image field: {'title': '26.1-snapshot-1-540x540.jpg', 'url': '/v2/images/26.1snapshot1540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/26.1snapshot1540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/4f3ca502d454db7375895e51fe14ac5494fd93ed74d387343d386d02dcccbd81.jpg
+  image already cached
+[THREAD] Entry 2/6
+  title: Minecraft: Java Edition 1.21.11
+  image field: {'title': '1.21.11-540x540.jpg', 'url': '/v2/images/1.21.11540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/1.21.11540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/3c26594cfd60698ea120e64efd1ea9d6fdea35a96328b7236626f058d34de885.jpg
+  image already cached
+[THREAD] Entry 3/6
+  title: Minecraft 1.21.11 Release Candidate 3
+  image field: {'title': '1.21.11-rc3-540x540.jpg', 'url': '/v2/images/1.21.11rc3540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/1.21.11rc3540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/bf1ffad063d6f0cfcc3d12cf403a4d639c3aaf277d01fcb9660ac8f79ab16692.jpg
+  image already cached
+[THREAD] Entry 4/6
+  title: Minecraft 1.21.11 Release Candidate 2
+  image field: {'title': '1.21.11-rc2_540x540.jpg', 'url': '/v2/images/1.21.11rc2540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/1.21.11rc2540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/1281c8799aba5df251ba6857119d8f698649785add454f9ce9716d613104fa45.jpg
+  image already cached
+[THREAD] Entry 5/6
+  title: Minecraft 1.21.11 Release Candidate 1
+  image field: {'title': '1.21.11-rc1_540x540.jpg', 'url': '/v2/images/1.21.11rc1540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/1.21.11rc1540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/bb1db9d4d1828e799d765059feeff465aea6057de5719411e2cc1fbbfa929f55.jpg
+  image already cached
+[THREAD] Entry 6/6
+  title: Minecraft 1.21.11 Pre-Release 5
+  image field: {'title': '1.21.11-pre5_540x540.jpg', 'url': '/v2/images/1.21.11pre5540x540.jpg'}
+  image_url: https://launchercontent.mojang.com/v2/images/1.21.11pre5540x540.jpg
+  icon_path: /Users/braydenwatt/Library/Application Support/ReallyBadLauncher/cache/mojang_patchnotes/a4965bfa65aa024f3ae5c401fed4381929ec03e3b0b1f083304bd13422af56c5.jpg
+  image already cached
+[THREAD] Finished building items: 6
+[THREAD] Scheduling UI update
+[THREAD] Emitting mc_feed_done
+[THREAD] Worker finished
+[UI] DONE (main thread)

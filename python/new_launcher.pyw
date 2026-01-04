@@ -6361,18 +6361,6 @@ class LauncherV2(QMainWindow):
     def configure_resolution(self):
         print("TODO: resolution UI")
 
-class LoggerWriter:
-    def __init__(self, filepath):
-        self.terminal = sys.stdout
-        self.log = open(filepath, "a", buffering=1)
-
-    def write(self, message):
-        # Optional: write to terminal only if NOT production
-        # self.terminal.write(message) 
-        self.log.write(message)
-
-    def flush(self):
-        self.log.flush()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
