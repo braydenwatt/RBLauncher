@@ -11,6 +11,8 @@ A lightweight Python-based Minecraft launcher.
 ## How to Use
 
 1. Download the zip from the latest release [here](https://github.com/braydenwatt/A-Really-Bad-Fabric-Minecraft-Launcher/releases/latest).
+> [!IMPORTANT]
+> For version 2.0.3+ simply download the Source code (zip).
 <img width="1197" height="785" alt="Screenshot 2025-12-20 at 12 31 59 AM" src="https://github.com/user-attachments/assets/a1f13b6b-1a4e-4cbe-a7f7-3fa945331cc5" />
 
 2. Download "Java 21 JDK" from Self Service.
