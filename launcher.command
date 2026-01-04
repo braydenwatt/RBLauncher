@@ -7,12 +7,12 @@ cd "$(dirname "$0")" || exit 1
 pip3 install -r requirements.txt
 
 # Fix xattr for scripts inside ./scripts
-xattr -rc scripts/create_minecraft_directory.sh
-xattr -rc scripts/download_vanilla.sh
-xattr -rc scripts/fabric.command
-xattr -rc scripts/install_fabric.sh
+xattr -rc python/scripts/create_minecraft_directory.sh
+xattr -rc python/scripts/download_vanilla.sh
+xattr -rc python/scripts/fabric.command
+xattr -rc python/scripts/install_fabric.sh
 
 # Run the scripts using the new folder path
-./scripts/create_minecraft_directory.sh
+python/scripts/create_minecraft_directory.sh
 
 python3 python/new_launcher.py

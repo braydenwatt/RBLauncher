@@ -3961,7 +3961,7 @@ class LauncherV2(QMainWindow):
     def __init__(self):
         super().__init__()
         # --------- VERSION CONFIG ----------
-        self.APP_VERSION = "2.0.3"
+        self.APP_VERSION = "2.0.4"
         self.UPDATE_API_URL = "https://raw.githubusercontent.com/braydenwatt/RBLauncher/main/version_manifest.json"
 
         self.setWindowTitle(f"RBLauncher: Dusk (v{self.APP_VERSION})")
@@ -4572,7 +4572,7 @@ class LauncherV2(QMainWindow):
 
         app_title = QLabel("RBLauncher")
         app_title.setObjectName("AppTitle")
-        app_sub = QLabel("v2.0.0-beta • Dusk")
+        app_sub = QLabel("v2.0.4")
         app_sub.setObjectName("AppSubtitle")
 
         title_col.addWidget(app_title)
